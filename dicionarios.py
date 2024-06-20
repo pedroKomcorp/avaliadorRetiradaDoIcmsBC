@@ -42,3 +42,40 @@ def get_c170_dict(columns, index):
         '38-VL_ABAT_NT': columns[38],
         '39-LINHA': index
     }
+def get_c100_dict(columns, index):
+    # Garantir que a lista 'columns' tem pelo menos 30 elementos
+    if len(columns) < 30:
+        raise ValueError(f"Lista de colunas com tamanho insuficiente: esperado 30, mas obteve {len(columns)}.")
+
+    return {
+        '01-REG': columns[1],
+        '02-IND_OPER': columns[2],
+        '03-IND_EMIT': columns[3],
+        '04-COD_PART': columns[4],
+        '05-COD_MOD': columns[5],
+        '06-COD_SIT': columns[6],
+        '07-SER': columns[7],
+        '08-NUM_DOC': columns[8],
+        '09-CHV_NFE': columns[9],
+        '10-DT_DOC': columns[10],
+        '11-DT_E_S': columns[11],
+        '12-VL_DOC': columns[12],
+        '13-IND_PGTO': columns[13],
+        '14-VL_DESC': columns[14],
+        '15-VL_ABAT_NT': columns[15],
+        '16-VL_MERC': columns[16],
+        '17-IND_FRT': columns[17],
+        '18-VL_FRT': columns[18],
+        '19-VL_SEG': columns[19],
+        '20-VL_OUT_DA': columns[20],
+        '21-VL_BC_ICMS': columns[21],
+        '22-VL_ICMS': columns[22],
+        '23-VL_BC_ICMS_ST': columns[23],
+        '24-VL_ICMS_ST': columns[24],
+        '25-VL_IPI': columns[25],
+        '26-VL_PIS': columns[26],
+        '27-VL_COFINS': columns[27],
+        '28-VL_PIS_ST': columns[28],
+        '29-VL_COFINS_ST': columns[29],
+        '30-LINHA': index
+    }
