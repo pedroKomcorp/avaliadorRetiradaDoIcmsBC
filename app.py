@@ -7,8 +7,29 @@ def is_c100_valid(line):
     return len(arq) > 1 and arq[2] == '1'
 
 
+def compara_valores(valor_validado, valor_pis, valor_cofins, tolerancia=3):
+    """
+    Compara o valor_validado com valor_pis e valor_cofins, retornando True se a diferença entre eles
+    for menor ou igual à tolerância, tanto para cima quanto para baixo.
+
+    :param valor_validado: Valor a ser validado.
+    :param valor_pis: Valor da base PIS.
+    :param valor_cofins: Valor da base COFINS.
+    :param tolerancia: Tolerância permitida para a diferença.
+    :return: True se a diferença for menor ou igual à tolerância, False caso contrário.
+    """
+    valor_pis = float(valor_pis.replace(',', '.'))
+    valor_cofins = float(valor_cofins.replace(',', '.'))
+
+    diferenca_pis = abs(valor_validado - valor_pis)
+    diferenca_cofins = abs(valor_validado - valor_cofins)
+
+    return diferenca_pis <= tolerancia or diferenca_cofins <= tolerancia
+
+
 def extrair_infos(arquivo):
     validated_data = []
+    invalidated_data = []
     total_retirada_icms = 0.0
     total_pis = 0.0
     total_cofins = 0.0
@@ -40,7 +61,7 @@ def extrair_infos(arquivo):
                     if freteParcial > 0:
                         valorItemValidado += freteParcial
 
-                    if valorItemValidado == float(dictC170['26-VL_BC_PIS'].replace(',', '.')) or str(valorItemValidado) == float(dictC170['32-VL_BC_COFINS'].replace(',', '.')):
+                    if compara_valores(valorItemValidado, dictC170['26-VL_BC_PIS'], dictC170['32-VL_BC_COFINS']):
                         validated_data.append(dictC170)
                         bcliqpis = float(dictC170['26-VL_BC_PIS'].replace(',', '.')) - float(
                             dictC170['15-VL_ICMS'].replace(',', '.'))
@@ -55,11 +76,38 @@ def extrair_infos(arquivo):
                         total_pis += resultPis
                         total_retirada_icms += resultPis + resultCofins
                         total_item += valor_item
+                    else:
+                        invalidated_data.append(line)
 
-    print(f"Total item: {total_item:.2f}")
-    print(f"Total cofins: {total_cofins:.2f}")
-    print(f"Total pis: {total_pis:.2f}")
+
+    # print(f"Total item: {total_item:.2f}")
+    # print(f"Total cofins: {total_cofins:.2f}")
+    # print(f"Total pis: {total_pis:.2f}")
     print(f"Total retirada: {total_retirada_icms:.2f}")
+    print(len(invalidated_data))
+    base0 = 0
+    base0Array = []
+    baseN0 = 0
+    baseN0Array = []
+    for i in range(len(invalidated_data)):
+        registro = invalidated_data[i]
+        valor_pis = (registro[26])
+        if valor_pis == '0' or valor_pis == '':
+            base0Array.append(registro)
+            base0 += 1
+        else:
+            baseN0Array.append(registro)
+            baseN0 += 1
+    # print(base0)
+    # print(baseN0)
+    # with open("semBase.txt", "w") as arquivo:
+    #     for item in base0Array:
+    #         arquivo.write(item + "\n")
+    #
+    # with open("comBase.txt", "w") as arquivo:
+    #     for item in baseN0Array:
+    #         arquivo.write(item + "\n")
+
 
 
 def select_files():
