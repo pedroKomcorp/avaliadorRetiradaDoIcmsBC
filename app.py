@@ -1,5 +1,6 @@
 from dicionarios import get_c170_dict, get_c100_dict
 from tkinter import Tk, filedialog, messagebox
+import getSelic
 
 
 def is_c100_valid(line):
