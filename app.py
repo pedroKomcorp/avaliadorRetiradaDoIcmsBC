@@ -91,11 +91,6 @@ def extrair_infos(arquivo):
                     else:
                         invalidated_data.append(line)
 
-    # print(f"Total item: {total_item:.2f}")
-    # print(f"Total cofins: {total_cofins:.2f}")
-    # print(f"Total pis: {total_pis:.2f}")
-    print(f"Total retirada: {total_retirada_icms:.2f}")
-
 
 def select_files():
     root = Tk()
