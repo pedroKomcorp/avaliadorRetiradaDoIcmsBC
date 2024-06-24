@@ -37,15 +37,21 @@ class GetSelic:
                         self.selic_data[year].append(month_data)
 
     def retorna_selic(self, ano, mes):
-        if not self.selic_data[2019]:  # Check if data has not been fetched yet
-            self.fetch_data()
+        try:
+            mes += 1
+            if mes == 13:
+                mes = 1
+                ano += 1
+            if not self.selic_data[2019]:  # Check if data has not been fetched yet
+                self.fetch_data()
 
-        if ano not in self.selic_data or mes < 1 or mes > 12:
-            raise ValueError("Ano ou mês inválido.")
+            if ano not in self.selic_data or mes < 1 or mes > 12:
+                raise ValueError("Ano ou mês inválido.")
 
-        if len(self.selic_data[ano]) < mes:
-            raise ValueError("Dados insuficientes para o ano/mês especificado.")
+            if len(self.selic_data[ano]) < mes:
+                raise ValueError("Dados insuficientes para o ano/mês especificado.")
 
-        month_data = self.selic_data[ano][mes - 1]  # Adjust for 0-based index
-        return float(month_data.replace(',', '.')) / 100
-
+            month_data = self.selic_data[ano][mes - 1]  # Adjust for 0-based index
+            return float(month_data.replace(',', '.')) / 100
+        except ValueError:
+            return print("Não existe selic para esta data ainda!")

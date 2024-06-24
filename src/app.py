@@ -1,6 +1,25 @@
+import datetime
+
 from dicionarios import get_c170_dict, get_c100_dict
 from tkinter import Tk, filedialog, messagebox
-import getSelic
+from results import ExtractionResult
+from getSelic import GetSelic
+import xls
+
+
+def check_line_reg(reg: str, line: str):
+    return reg in line and '9900' not in line
+
+
+def extract_date_from_line(line):
+    columns = line.strip().split('|')
+    date_str = columns[6]
+    day = date_str[:2]
+    month = date_str[2:4]
+    year = date_str[4:8]
+
+    date_obj = datetime.datetime(int(year), int(month), int(day))
+    return date_obj
 
 
 def is_c100_valid(line):
@@ -37,12 +56,25 @@ def compara_valores(valor_validado, valor_pis, valor_cofins, tolerancia=3):
 
 
 def extrair_infos(arquivo):
-    validated_data = []
-    invalidated_data = []
-    total_retirada_icms = 0.0
-    total_pis = 0.0
-    total_cofins = 0.0
-    total_item = 0.0
+    get_selic = GetSelic()
+    # Initialize variables
+    comp = ""
+    base_pis = 0.0
+    base_cofins = 0.0
+    valor_pis = 0.0
+    valor_cofins = 0.0
+    valor_icms = 0.0
+    base_pis_sem_icms = 0.0
+    base_cofins_sem_icms = 0.0
+    selic = 0.0
+    cred_pis = 0.0
+    cred_pis_atz = 0.0
+    cred_cofins = 0.0
+    cred_cofins_atz = 0.0
+    valor_pis_sem_icms = 0.0
+    valor_cofins_sem_icms = 0.0
+
+    found_0000 = False
 
     with open(arquivo, 'r', encoding="Latin-1") as file:
         lines = file.readlines()
@@ -51,12 +83,21 @@ def extrair_infos(arquivo):
         freteCalculado = 0.0
 
         for index, line in enumerate(lines):
+            if check_line_reg('|0000|', line) and not found_0000:
+                date_obj = extract_date_from_line(line)
+                comp = date_obj.strftime("%m%Y")
+
+                # Get the selic for the found date
+                selic = get_selic.retorna_selic(date_obj.year, date_obj.month)
+                found_0000 = True
+
             if '|C100|' in line and '|9900|' not in line:
                 c100columns = line.strip().split("|")
                 dictC100 = get_c100_dict(c100columns, index)
                 valorTotalNota = float(dictC100['16-VL_MERC'].replace(',', '.'))
                 freteCalculado = float(dictC100['18-VL_FRT'].replace(',', '.'))
                 latest_c100_valid = is_c100_valid(line)
+
             if '|C170|' in line:
                 columns = line.strip().split("|")
                 if latest_c100_valid and len(columns) >= 39:
@@ -73,23 +114,28 @@ def extrair_infos(arquivo):
                         valorItemValidado += freteParcial
 
                     if compara_valores(valorItemValidado, dictC170['26-VL_BC_PIS'], dictC170['32-VL_BC_COFINS']):
-                        validated_data.append(dictC170)
-                        bcliqpis = float(dictC170['26-VL_BC_PIS'].replace(',', '.')) - float(
-                            dictC170['15-VL_ICMS'].replace(',', '.'))
-                        pisliq = bcliqpis * (float(dictC170['27-ALIQ_PIS'].replace(',', '.')) / 100)
-                        resultPis = float(dictC170['30-VL_PIS'].replace(',', '.')) - pisliq
+                        base_pis += float(dictC170['26-VL_BC_PIS'].replace(',', '.'))
+                        valor_pis += float(dictC170['30-VL_PIS'].replace(',', '.'))
+                        base_cofins += float(dictC170['32-VL_BC_COFINS'].replace(',', '.'))
+                        valor_cofins += float(dictC170['36-VL_COFINS'].replace(',', '.'))
+                        valor_icms += float(dictC170['15-VL_ICMS'].replace(',', '.'))
+                        base_pis_sem_icms = base_pis - valor_icms
+                        base_cofins_sem_icms = base_cofins - valor_icms
+                        valor_pis_sem_icms = base_pis_sem_icms * (
+                                float(dictC170['27-ALIQ_PIS'].replace(',', '.')) / 100)
+                        valor_cofins_sem_icms = base_cofins_sem_icms * (
+                                float(dictC170['33-ALIQ_COFINS'].replace(',', '.')) / 100)
+                        cred_pis = valor_pis - valor_pis_sem_icms
+                        cred_pis_atz = cred_pis * (1 + selic)
+                        cred_cofins = valor_cofins - valor_cofins_sem_icms
+                        cred_cofins_atz = cred_cofins * (1 + selic)
 
-                        bcliqcofins = float(dictC170['32-VL_BC_COFINS'].replace(',', '.')) - float(
-                            dictC170['15-VL_ICMS'].replace(',', '.'))
-                        cofinslic = bcliqcofins * (float(dictC170['33-ALIQ_COFINS'].replace(',', '.')) / 100)
-                        resultCofins = float(dictC170['36-VL_COFINS'].replace(',', '.')) - cofinslic
-
-                        total_cofins += resultCofins
-                        total_pis += resultPis
-                        total_retirada_icms += resultPis + resultCofins
-                        total_item += valor_item
-                    else:
-                        invalidated_data.append(line)
+    return ExtractionResult(
+        comp, base_pis, base_cofins, valor_pis, valor_cofins,
+        valor_icms, base_pis_sem_icms, base_cofins_sem_icms,
+        selic, valor_pis_sem_icms, valor_cofins_sem_icms,
+        cred_pis, cred_pis_atz, cred_cofins, cred_cofins_atz
+    )
 
 
 def select_files():
@@ -108,8 +154,15 @@ def main():
         messagebox.showinfo("Informação", "Nenhum arquivo selecionado.")
         return
 
+    client_name = "Nome do Cliente"
+    client_cnpj = "CNPJ do Cliente"
+    filename = "consolidated_results.xlsx"
+    results = []
     for file_path in file_paths:
-        extrair_infos(file_path)
+        result = extrair_infos(file_path)
+        results.append(result)
+
+    xls.create_spreadsheet(results, filename, client_name, client_cnpj)
 
     messagebox.showinfo("Informação", "Processamento concluído!")
 
