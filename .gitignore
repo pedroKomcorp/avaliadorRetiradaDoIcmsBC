@@ -3,3 +3,6 @@
 
 .idea/inspectionProfiles/
 files
+dist
+build
+app.spec
