@@ -1,5 +1,3 @@
-# dicionarios.py
-
 def get_c170_dict(columns, index):
     return {
         '01-REG': columns[1],
@@ -42,6 +40,8 @@ def get_c170_dict(columns, index):
         '38-VL_ABAT_NT': columns[38],
         '39-LINHA': index
     }
+
+
 def get_c100_dict(columns, index):
     # Garantir que a lista 'columns' tem pelo menos 30 elementos
     if len(columns) < 30:
@@ -79,3 +79,12 @@ def get_c100_dict(columns, index):
         '29-VL_COFINS_ST': columns[29],
         '30-LINHA': index
     }
+
+
+def is_c100_valid(line):
+    """
+    Confere segundo campo do registro C100
+    """
+    arq = line.strip().split("|")
+    return len(arq) > 1 and arq[2] == '1'
+

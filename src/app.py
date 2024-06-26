@@ -1,43 +1,26 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-import xls  # Supondo que xls é o módulo onde a função create_spreadsheet está definida
-from extract import extrair_infos  # Supondo que extrair_infos é a função que extrai informações dos arquivos
-
-
-def format_cnpj(cnpj):
-    # Remove any non-digit characters
-    cnpj = ''.join(filter(str.isdigit, cnpj))
-    # Format the CNPJ as xxx.xxx.xxx/xxxx-xx
-    formatted = ""
-    for i, digit in enumerate(cnpj):
-        if i in [2, 5]:
-            formatted += f"{digit}."
-        elif i == 8:
-            formatted += f"{digit}/"
-        elif i == 12:
-            formatted += f"{digit}-"
-        else:
-            formatted += digit
-    return formatted
+from src.utils.docs import xlsx
+from src.utils.extractor.sped_contrib_extract import extrair_infos
+import os
 
 
 class Application(tk.Tk):
-
-    def validate_cnpj(self, P):
-        # Allow backspace (empty string), ensure only digits, and auto-format
-        if P == "" or (P.isdigit() and len(P) <= 14):
-            self.client_cnpj.set(format_cnpj(P))
-            return True
-        return False
-
     def __init__(self):
         super().__init__()
+        self.cnpj_entry = None
         self.progress = None
         self.file_listbox = None
-        self.title("Processador de Documentos")
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        icon_path = os.path.join(script_dir, "assets", "icon.ico")
+        self.iconbitmap(icon_path)
+        self.title("KB - Retirada ICMS da Base de Cálculo")
+
         self.geometry("600x400")
-        self.state('zoomed')
+        self.resizable(False, False)
+
         self.file_paths = []
+        self.file_type = tk.StringVar(value="SPED ICMS IPI")
         self.client_name = tk.StringVar()
         self.client_cnpj = tk.StringVar()
         self.save_path = tk.StringVar()
@@ -45,50 +28,60 @@ class Application(tk.Tk):
         self.create_widgets()
 
     def create_widgets(self):
-        self.create_file_selector()
+        self.create_left_section()
         self.create_file_list()
-        self.create_client_info()
-        self.create_save_location()
         self.create_progress_bar()
         self.create_process_button()
+        # self.create_save_location()
+        # self.create_progress_bar()
+        # self.create_process_button()
 
-    def create_file_selector(self):
-        select_button = tk.Button(self, text="Selecionar Arquivos", command=self.select_files)
-        select_button.pack(pady=10)
+    def create_left_section(self):
+        frame = tk.Frame(self)
+        frame.grid(row=0, column=0, sticky=tk.NSEW)
+
+        self.create_file_selector(frame)
+        self.create_file_type_dropdown(frame)
+        self.create_client_info(frame)
+        self.create_save_location(frame)
+
+    def create_file_selector(self, frame):
+        select_button = tk.Button(frame, text="Selecionar Arquivos", command=self.select_files)
+        select_button.grid(row=0, column=0, sticky=tk.NW, pady=18, padx=15)
+
+    def create_file_type_dropdown(self, frame):
+        options = ["SPED Contribuições", "SPED ICMS IPI", "NF-C"]
+        dropdown = tk.OptionMenu(frame, self.file_type, self.file_type.get(), *options, command=self.update_file_list)
+        dropdown.grid(row=0, column=1, pady=10)
 
     def create_file_list(self):
         self.file_listbox = tk.Listbox(self, height=10, width=50)
-        self.file_listbox.pack(pady=10)
+        self.file_listbox.grid(row=0, column=1, pady=10, padx=10, sticky=tk.NS)
 
-    def create_client_info(self):
-        frame = tk.Frame(self)
-        frame.pack(pady=10)
+    def create_client_info(self, frame):
+        tk.Label(frame, text="Nome do Cliente:").grid(row=1, column=0, pady=5, sticky=tk.NSEW)
+        tk.Entry(frame, textvariable=self.client_name).grid(row=1, column=1, padx=10, pady=5)
+        client_cnpj = tk.StringVar(value="xxx.xxx.xx/xxxx-xx")
+        vcmd = (self.register(self.on_validate), '%P')
 
-        tk.Label(frame, text="Nome do Cliente:").grid(row=0, column=0, padx=5, pady=5)
-        tk.Entry(frame, textvariable=self.client_name).grid(row=0, column=1, padx=5, pady=5)
+        self.cnpj_entry = tk.Entry(frame, textvariable=client_cnpj, validate='key', validatecommand=vcmd)
+        self.cnpj_entry.grid(row=2, column=1, padx=10, pady=5)
+        self.cnpj_entry.bind("<KeyRelease>", self.on_key_release)
 
-        tk.Label(frame, text="CNPJ do Cliente:").grid(row=1, column=0, padx=5, pady=5)
-
-        vcmd = (self.register(self.validate_cnpj), '%P')
-        self.cnpj_entry = tk.Entry(frame, textvariable=self.client_cnpj, validate='key', validatecommand=vcmd)
-        self.cnpj_entry.grid(row=1, column=1, padx=5, pady=5)
-
-    def create_save_location(self):
-        frame = tk.Frame(self)
-        frame.pack(pady=10)
-
-        tk.Label(frame, text="Salvar em:").grid(row=0, column=0, padx=5, pady=5)
-        tk.Entry(frame, textvariable=self.save_path).grid(row=0, column=1, padx=5, pady=5)
-        tk.Button(frame, text="Selecionar Pasta", command=self.select_save_location).grid(row=0, column=2, padx=5,
+    def create_save_location(self, frame):
+        tk.Label(frame, text="").grid(row=4, column=0, pady=4, sticky=tk.NSEW)
+        tk.Label(frame, text="Salvar em:").grid(row=5, column=0, padx=5, pady=5)
+        tk.Entry(frame, textvariable=self.save_path).grid(row=5, column=1, padx=5, pady=5)
+        tk.Button(frame, text="Selecionar Pasta", command=self.select_save_location).grid(row=6, column=1, padx=5,
                                                                                           pady=5)
 
     def create_progress_bar(self):
-        self.progress = ttk.Progressbar(self, orient="horizontal", length=300, mode="determinate")
-        self.progress.pack(pady=20)
+        self.progress = ttk.Progressbar(self, orient="horizontal", length=250, mode="determinate")
+        self.progress.grid(row=1, column=1, padx=10, pady=10)
 
     def create_process_button(self):
         process_button = tk.Button(self, text="Criar XLSX", command=self.process_documents)
-        process_button.pack(pady=10)
+        process_button.grid(row=2, column=0, pady=10)
 
     def select_files(self):
         self.file_paths = filedialog.askopenfilenames(title="Selecione os arquivos")
@@ -121,11 +114,43 @@ class Application(tk.Tk):
             self.update_idletasks()
 
         filename = f"{self.save_path.get()}/{self.client_name.get()}.xlsx"
-        xls.create_spreadsheet(results, filename, self.client_name.get(), self.client_cnpj.get())
+        xlsx.create_spreadsheet(results, filename, self.client_name.get(), self.client_cnpj.get())
 
         messagebox.showinfo("Informação", "Processamento concluído!")
         self.progress["value"] = 0
-        app.destroy()
+        self.destroy()
+
+    def update_file_list(self, _=None):
+        self.file_listbox.delete(0, tk.END)
+        for file_path in self.file_paths:
+            self.file_listbox.insert(tk.END, file_path)
+
+    def on_validate(self, P):
+        # Permite apenas números ou string vazia
+        if P.isdigit() or P == "":
+            return True
+        return False
+
+    def on_key_release(self, event):
+        current_text = self.cnpj_entry.get()
+        formatted_text = self.format_cnpj(current_text)
+        self.client_cnpj.set(formatted_text)
+        self.cnpj_entry.delete(0, tk.END)
+        self.cnpj_entry.insert(0, formatted_text)
+        # Move o cursor para o final
+        self.cnpj_entry.icursor(tk.END)
+
+    def format_cnpj(self, cnpj):
+        # Remove tudo que não é número
+        cnpj = ''.join(filter(str.isdigit, cnpj))
+        if len(cnpj) == 0:
+            return "xxx.xxx.xx/xxxx-xx"
+
+        # Aplica a máscara de CNPJ
+        formatted = "xxx.xxx.xx/xxxx-xx"
+        for i in range(len(cnpj)):
+            formatted = formatted.replace('x', cnpj[i], 1)
+        return formatted
 
 
 if __name__ == "__main__":
