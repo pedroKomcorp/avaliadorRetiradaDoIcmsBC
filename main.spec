@@ -11,11 +11,10 @@ a = Analysis(
     pathex=[project_dir],
     binaries=[],
     datas=[
-        (os.path.join(project_dir, 'utils', 'docs', '*'), 'utils/docs'),
-        (os.path.join(project_dir, 'utils', 'extractor', '*'), 'utils/extractor'),
-        (os.path.join(project_dir, 'utils', 'speds', '*'), 'utils/speds'),
+        (os.path.join(project_dir, '*'), 'utils/extractor'),
+        (os.path.join(project_dir, 'speds', '*'), 'utils/speds'),
         (os.path.join(project_dir, 'assets', 'icon.ico'), 'assets'),
-        (os.path.join(project_dir, 'assets', 'LOGOS_KOMBUSINESS_FUNDOESCURO_V2.png'), 'assets')
+        (os.path.join(project_dir, 'assets', 'LOGOS_KOMBUSINESS_FUNDOESCURO_V2.ico'), 'assets')
     ],
     hiddenimports=collect_submodules('openpyxl'),
     hookspath=[],

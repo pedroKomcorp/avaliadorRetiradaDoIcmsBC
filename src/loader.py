@@ -1,5 +1,4 @@
 import os
-
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
@@ -22,16 +21,19 @@ def auto_adjust_column_widths(sheet):
 
 
 def create_spreadsheet(results, filename, client_name, client_cnpj):
+    print(results[0])
+
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "Resultados"
 
-# styles
-    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    # styles
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'),
+                         bottom=Side(style='thin'))
     fill_1 = PatternFill(start_color="e5d3c7", end_color="e5d3c7", fill_type="solid")
     fill_2 = PatternFill(start_color="cba797", end_color="cba797", fill_type="solid")
 
-# header section
+    # header section
     header_fill = PatternFill(start_color="1F1E27", end_color="1F1E27", fill_type="solid")
     sheet.merge_cells('A1:H1')
     sheet['A1'] = f"CLIENTE: {client_name}"
@@ -53,7 +55,7 @@ def create_spreadsheet(results, filename, client_name, client_cnpj):
     img.anchor = 'G1'
     sheet.add_image(img)
 
-# total section
+    # total section
     sheet.merge_cells('A4:B4')
     sheet['A4'] = 'Créditos gerados'
     sheet['A4'].font = Font(bold=True, size=14, color="FFFFFF")
@@ -70,11 +72,7 @@ def create_spreadsheet(results, filename, client_name, client_cnpj):
             cell = sheet[f'{col}{i}']
             cell.fill = fill_1
             cell.border = thin_border
-
-    # Adicionando uma linha de espaço
-
-
-# pis section
+    # pis section
     pis_headers = [
         "Competência", "Base de Cálculo PIS", "Valor PIS", "Base de Cálculo PIS sem ICMS", "Valor PIS sem ICMS",
         "Crédito PIS", "SELIC", "Crédito PIS Atualizado"
@@ -93,6 +91,7 @@ def create_spreadsheet(results, filename, client_name, client_cnpj):
         cell.alignment = Alignment(horizontal="center")
         cell.border = thin_border
     for row_num, result in enumerate(results, start=start_row_pis + 1):
+
         pis_data = [
             result.comp, result.base_pis, result.valor_pis, result.base_pis_sem_icms, result.valor_pis_sem_icms,
             result.cred_pis, result.selic, result.cred_pis_atz
@@ -121,7 +120,6 @@ def create_spreadsheet(results, filename, client_name, client_cnpj):
     total_value_cell.font = openpyxl.styles.Font(bold=True, color="FFFFFF")
     sheet['B5'] = sum_formula_pis
 
-# cofins section
     cofins_headers = [
         "Competência", "Base de Cálculo COFINS", "Valor COFINS", "Base de Cálculo COFINS sem ICMS",
         "Valor COFINS sem ICMS", "Crédito COFINS", "SELIC", "Crédito COFINS Atualizado"
