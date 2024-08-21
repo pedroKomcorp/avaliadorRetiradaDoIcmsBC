@@ -56,7 +56,7 @@ class GetSelic:
             month_data = self.selic_data[ano][mes - 1]  # Adjust for 0-based index
             return float(month_data.replace(',', '.')) / 100
         except ValueError:
-            return print("Não existe selic para esta data ainda!")
+            return 0.0
 
 
 get_selic = GetSelic()
@@ -86,8 +86,8 @@ def retorna_retirada_icms_bc(produtos: list):
     for produto in produtos:
         base_pis_sem_icms = produto.impostos.pis.bc - produto.impostos.icms.valor
         base_cofins_sem_icms = produto.impostos.cofins.bc - produto.impostos.icms.valor
-        valor_pis_sem_icms = base_pis_sem_icms * (produto.impostos.pis.aliq / 100)
-        valor_cofins_sem_icms = base_cofins_sem_icms * (produto.impostos.cofins.aliq / 100)
+        valor_pis_sem_icms = round(base_pis_sem_icms * (produto.impostos.pis.aliq / 100), 2)
+        valor_cofins_sem_icms = round(base_cofins_sem_icms * (produto.impostos.cofins.aliq / 100), 2)
         cred_pis = produto.impostos.pis.valor - valor_pis_sem_icms
         cred_cofins = produto.impostos.cofins.valor - valor_cofins_sem_icms
 
@@ -116,6 +116,7 @@ def retorna_retirada_icms_bc(produtos: list):
             cred_cofins=cred_cofins,
             cred_cofins_atz=cred_cofins_atz
         )
+        print(resultado)
         resultados.append(resultado)
     return resultados
 

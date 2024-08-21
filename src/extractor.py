@@ -46,6 +46,108 @@ class Produto:
     impostos: Impostos = field(default_factory=Impostos)
 
 
+def retorna_produtos_e_impostos_cruzamento_efd_icms_pis_cofins(efd_icms_paths, efd_pis_cofins_paths) -> List[Produto]:
+    produtos = []
+
+    for efd_icms_path in efd_icms_paths:
+        with open(efd_icms_path, 'r', encoding="Latin-1") as file:
+            efd_data_inicio, efd_data_fim = check_sped_date(efd_icms_path)
+            lines = file.readlines()
+            orig_icms = '0'
+            cst_icms = ''
+            aliq_icms = 0
+            bc_icms = 0
+            valor_icms = 0
+            comp_icms = ""
+            for line in lines:
+                columns = line.strip().split("|")
+                if '|0000|' in line and '|9999|' not in line:
+                    date_obj = extract_date_from_line(line)
+                    comp_icms = date_obj.strftime("%m/%Y")
+                if '|C190|' in line:
+                    cst_icms = columns[2]
+                    aliq_icms += float(columns[4])
+                    bc_icms += float(columns[8])
+                    valor_icms += float(columns[7])
+            icms_values = ICMS(
+                orig=orig_icms,
+                cst=cst_icms,
+                bc=bc_icms,
+                aliq=aliq_icms,
+                valor=valor_icms
+            )
+
+            data_flag = False
+
+            for efd_pis_cofins_path in efd_pis_cofins_paths:
+                with open(efd_pis_cofins_path, 'r', encoding="Latin-1") as file:
+                    lines = file.readlines()
+                    cst_pis = ""
+                    bc_pis = 0
+                    aliq_pis = 0
+                    valor_pis = 0
+                    cst_cofins = ""
+                    bc_cofins = 0
+                    aliq_cofins = 0
+                    valor_cofins = 0
+                    nome_produto = ""
+                    valor_produto = 0
+                    cfop_produto = ""
+                    frete_produto = 0
+
+                    for line in lines:
+                        columns = line.strip().split("|")
+                        if '|0000|' in line and '|9999|' not in line:
+                            date_obj = extract_date_from_line(columns)
+                            if efd_data_inicio <= date_obj <= efd_data_fim:
+                                data_flag = True
+                        if data_flag:
+                            if '|C170|' in line and '|9999|' not in line:
+                                cst_pis = columns[24]
+                                bc_pis += float(columns[25])
+                                aliq_pis += float(columns[26])
+                                valor_pis += float(columns[27])
+                                cst_cofins = columns[28]
+                                bc_cofins += float(columns[29])
+                                aliq_cofins += float(columns[30])
+                                valor_cofins += float(columns[31])
+                                nome_produto = columns[8]
+                                valor_produto += float(columns[13])
+                                cfop_produto = columns[11]
+                                frete_produto += float(columns[20])
+
+                    pis_values = PIS(
+                        cst=cst_pis,
+                        bc=bc_pis,
+                        aliq=aliq_pis,
+                        valor=valor_pis
+                    )
+
+                    cofins_values = COFINS(
+                        cst=cst_cofins,
+                        bc=bc_cofins,
+                        aliq=aliq_cofins,
+                        valor=valor_cofins
+                    )
+
+                    impostos = Impostos(
+                        icms=icms_values,
+                        cofins=cofins_values,
+                        pis=pis_values
+                    )
+
+                    produto = Produto(
+                        comp=comp_icms,
+                        nome=nome_produto,
+                        valor=valor_produto,
+                        cfop=cfop_produto,
+                        frete=frete_produto,
+                        impostos=impostos
+                    )
+    produtos.append(produto)
+    return produtos
+
+
 # sped contrib
 def retorna_produtos_e_impostos_sped_contrib(sped_contrib_paths) -> List[Produto]:
     found_0000 = False
@@ -83,13 +185,12 @@ def retorna_produtos_e_impostos_sped_contrib(sped_contrib_paths) -> List[Produto
                             freteParcial = 0
                             if valor_total_nota != 0:
                                 freteParcial = round((valor_item / valor_total_nota) * frete_calculado, 2)
-
-                            valor_item_validado = round(valor_item - float(dict_c170['08-VL_DESC'].replace(',', '.')),
-                                                        2)
+                            valor_item_validado = round(
+                                valor_item - float(dict_c170['08-VL_DESC'].replace(',', '.')), 2)
                             if freteParcial > 0:
                                 valor_item_validado += freteParcial
-
-                            if compara_valores(valor_item_validado, dict_c170['26-VL_BC_PIS'],
+                            if compara_valores(valor_item_validado,
+                                               dict_c170['26-VL_BC_PIS'],
                                                dict_c170['32-VL_BC_COFINS']):
                                 icms = ICMS(
                                     orig='0',
@@ -126,7 +227,19 @@ def retorna_produtos_e_impostos_sped_contrib(sped_contrib_paths) -> List[Produto
                                 product_list.append(produto)
         except Exception as e:
             print(f"Erro ao processar o arquivo {sped_contrib_path}: {e}")
+            continue
     return product_list
+
+
+def check_sped_date(sped_path):
+    with open(sped_path, 'r', encoding='latin-1') as sped:
+        lines = sped.readlines()
+        for line in lines:
+            if line.startswith('|0000|'):
+                columns = line.split('|')
+                # Correct the date parsing
+                return (datetime.strptime(columns[6], '%d%m%Y').strftime('%d%m%Y'),
+                        datetime.strptime(columns[7], '%d%m%Y').strftime('%d%m%Y'))
 
 
 def compara_valores(valor_validado, valor_pis, valor_cofins, tolerancia=3):
@@ -246,15 +359,14 @@ def is_c100_valid(line):
 
 
 # Nota fiscal
-
 def retorna_produtos_e_impostos_xmls(xml_paths) -> List[Produto]:
     product_list = []
     for xml_path in xml_paths:
         try:
             with open(xml_path, 'rb') as file:
                 parsed_xml = xmltodict.parse(file)
-                data = parsed_xml['nfeProc']['NFe']['infNFe']['ide']['dhEmi']  # initial format 2024-03-01T11:21:05-03:00
-                comp_date = parse_date(data)  # Parse the date string
+                data = parsed_xml['nfeProc']['NFe']['infNFe']['ide']['dhEmi']
+                comp_date = parse_date(data)
                 if comp_date:
                     comp_xml = comp_date.strftime('%m/%Y')
                 else:
@@ -268,6 +380,7 @@ def retorna_produtos_e_impostos_xmls(xml_paths) -> List[Produto]:
                 for product in products:
                     prod_data = product['prod']
                     imposto_data = product['imposto']
+
                     # TODO: Parar análise do produto caso ele tenha CFOP X
 
                     # TODO: Parar análise do produto caso seja uma nota de entrada
@@ -278,7 +391,8 @@ def retorna_produtos_e_impostos_xmls(xml_paths) -> List[Produto]:
                     icms_key = next(iter(icms_data))
                     icms = icms_data[icms_key]
 
-                    cofins_data = imposto_data['COFINS']['COFINSAliq'] if 'COFINSAliq' in imposto_data['COFINS'] else None
+                    cofins_data = imposto_data['COFINS']['COFINSAliq'] if 'COFINSAliq' in imposto_data[
+                        'COFINS'] else None
                     pis_data = imposto_data['PIS']['PISAliq'] if 'PISAliq' in imposto_data['PIS'] else None
 
                     produto_info = Produto(
@@ -328,12 +442,10 @@ def parse_date(date_str):
 def check_line_reg(reg: str, line: str): return reg in line and '9900' not in line
 
 
-def extract_date_from_line(line):
-    columns = line.strip().split('|')
+def extract_date_from_line(columns):
     date_str = columns[6]
     day = date_str[:2]
     month = date_str[2:4]
     year = date_str[4:8]
 
-    date_obj = datetime(int(year), int(month), int(day))
-    return date_obj
+    return datetime(int(year), int(month), int(day))
