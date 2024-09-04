@@ -12,10 +12,10 @@ def format_cnpj(cnpj):
     # Remove tudo que não é número
     cnpj = ''.join(filter(str.isdigit, cnpj))
     if len(cnpj) == 0:
-        return "xxx.xxx.xx/xxxx-xx"
+        return "xx.xxx.xxx/xxxx-xx"
 
     # Aplica a máscara de CNPJ
-    formatted = "xxx.xxx.xx/xxxx-xx"
+    formatted = "xx.xxx.xxx/xxxx-xx"
     for i in range(len(cnpj)):
         formatted = formatted.replace('x', cnpj[i], 1)
     return formatted
@@ -28,9 +28,17 @@ def on_validate(P):
     return False
 
 
+def clear_frame(self, frame):
+    for widget in frame.winfo_children():
+        widget.destroy()
+
+
 class Application(ctk.CTk):
     def __init__(self):
         super().__init__()
+        self.file_paths_icms = None
+        self.file_paths_pis_cofins = None
+        self.flag = None
         self.label_file_list = None
         self.left_section = None
         self.main_frame = None
@@ -39,13 +47,13 @@ class Application(ctk.CTk):
         self.progress = None
         self.file_listbox = None
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        icon_path = os.path.join(script_dir, "assets", "kbicon.ico")
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme(os.path.join(script_dir, "../assets", "kombussines_theme.json"))
+        icon_path = os.path.join(script_dir, "../assets", "kbicon.ico")
         self.iconbitmap(icon_path)
         self.title("KB - Retirada ICMS da Base de Cálculo")
-        self.geometry("600x400")
-
-        self.resizable(True, True)
-
+        self.geometry("700x500")
+        self.resizable(False, False)
         self.file_paths = []
         self.file_type = ctk.StringVar(name="Tipo Arquivo", value="Tipo Arquivo", )
         self.client_name = ctk.StringVar()
@@ -53,10 +61,6 @@ class Application(ctk.CTk):
         self.save_path = ctk.StringVar()
         self.create_widgets()
         self.configure_grid()
-        self.flag = None
-
-        ctk.set_appearance_mode("dark")  # Set the appearance mode
-        ctk.set_default_color_theme(os.path.join(script_dir, "assets", "kombussines_theme.json"))  # Set the color theme
 
     def configure_grid(self):
         self.grid_columnconfigure(0, weight=1)
@@ -92,10 +96,17 @@ class Application(ctk.CTk):
             select_button = ctk.CTkButton(frame, text="Selecionar Arquivos SPED Contribuições",
                                           command=self.select_files)
             select_button.grid(row=0, column=1, sticky=ctk.NSEW, pady=18, padx=15)
-        elif self.flag == "flag_icms/pis_cofins":
-            select_button = ctk.CTkButton(frame, text="Selecionar Arquivo EFD ICMS/PIS COFINS",
-                                          command=self.select_files)
-            select_button.grid(row=0, column=1, sticky=ctk.NSEW, pady=18, padx=15)
+
+        elif self.flag == "flag_comp_efd_icms_pis_cofins":
+            # Create two selectors for EFD ICMS/PIS COFINS
+            select_button_1 = ctk.CTkButton(frame, text="Selecionar Arquivo EFD ICMS",
+                                            command=lambda: self.select_files('efd_icms'))
+            select_button_1.grid(row=0, column=1, sticky=ctk.NSEW, pady=18, padx=15)
+
+            select_button_2 = ctk.CTkButton(frame, text="Selecionar Arquivo PIS/COFINS",
+                                            command=lambda: self.select_files('pis_cofins'))
+            select_button_2.grid(row=1, column=1, sticky=ctk.NSEW, pady=18, padx=15)
+
         elif self.flag == "flag_xml":
             select_button = ctk.CTkButton(frame, text="Selecionar Arquivos XML", command=self.select_files)
             select_button.grid(row=0, column=1, sticky=ctk.NSEW, pady=18, padx=15)
@@ -103,7 +114,7 @@ class Application(ctk.CTk):
             ctk.CTkLabel(frame, text="Selecione o tipo de arquivo", text_color='#FFFFFF').grid(row=0, column=1, pady=10)
 
     def create_file_type_dropdown(self, frame):
-        options = ["SPED Contribuições", "EFC ICMS/PIS COFINS", "XML"]
+        options = ["SPED Contribuições", "EFD ICMS/PIS COFINS", "XML"]
         dropdown = ctk.CTkOptionMenu(frame, variable=self.file_type, values=options, command=self.update_file_list)
         dropdown.grid(row=0, column=0, pady=10)
 
@@ -115,14 +126,18 @@ class Application(ctk.CTk):
         self.main_frame.grid_rowconfigure(0, weight=1)
 
     def create_client_info(self, frame):
-        ctk.CTkLabel(frame, text="Nome do Cliente:").grid(row=1, column=0, pady=5, sticky=ctk.NSEW)
-        ctk.CTkEntry(frame, textvariable=self.client_name).grid(row=1, column=1, padx=10, pady=5, sticky=ctk.NSEW)
+        # Determine the starting row based on the flag
+        start_row = 1 if self.flag != "flag_comp_efd_icms_pis_cofins" else 2
+
+        ctk.CTkLabel(frame, text="Nome do Cliente:").grid(row=start_row, column=0, pady=5, sticky=ctk.NSEW)
+        ctk.CTkEntry(frame, textvariable=self.client_name).grid(row=start_row, column=1, padx=10, pady=5,
+                                                                sticky=ctk.NSEW)
         client_cnpj = ctk.StringVar(value="xxx.xxx.xx/xxxx-xx")
         vcmd = (self.register(on_validate), '%P')
 
-        ctk.CTkLabel(frame, text="CNPJ:").grid(row=2, column=0, pady=5, sticky=ctk.NSEW)
+        ctk.CTkLabel(frame, text="CNPJ:").grid(row=start_row + 1, column=0, pady=5, sticky=ctk.NSEW)
         self.cnpj_entry = ctk.CTkEntry(frame, textvariable=client_cnpj, validate='key', validatecommand=vcmd)
-        self.cnpj_entry.grid(row=2, column=1, padx=10, pady=5, sticky=ctk.NSEW)
+        self.cnpj_entry.grid(row=start_row + 1, column=1, padx=10, pady=5, sticky=ctk.NSEW)
         self.cnpj_entry.bind("<KeyRelease>", self.on_key_release)
 
     def create_save_location(self, frame):
@@ -142,13 +157,39 @@ class Application(ctk.CTk):
         process_button = ctk.CTkButton(self.main_frame, text="Criar XLSX", command=self.process_documents)
         process_button.grid(row=2, column=0, columnspan=2, pady=10, padx=10, sticky=ctk.EW)
 
-    def select_files(self):
+    def update_selected_files_list(self):
+        # Clear the current list
         self.file_listbox.configure(state="normal")
-        self.file_paths = filedialog.askopenfilenames(title="Selecione os arquivos")
         self.file_listbox.delete("1.0", ctk.END)
-        for file_path in self.file_paths:
-            self.file_listbox.insert(ctk.END, file_path + "\n")
+
+        # Add ICMS files
+        if self.file_paths_icms:
+            for file_path in self.file_paths_icms:
+                self.file_listbox.insert(ctk.END, f"{file_path}\n")
+
+        # Add PIS/COFINS files
+        if self.file_paths_pis_cofins:
+            for file_path in self.file_paths_pis_cofins:
+                self.file_listbox.insert(ctk.END, f"{file_path}\n")
+
+        # Add other files
+        if self.file_paths:
+            for file_path in self.file_paths:
+                self.file_listbox.insert(ctk.END, f"{file_path}\n")
+
         self.file_listbox.configure(state="disabled")
+
+    def select_files(self, file_type=None):
+        if file_type == 'efd_icms':
+            self.file_paths_icms = filedialog.askopenfilenames(title="Selecione o arquivo EFD ICMS",
+                                                               filetypes=[("Text files", "*.txt")])
+        elif file_type == 'pis_cofins':
+            self.file_paths_pis_cofins = filedialog.askopenfilenames(title="Selecione o arquivo PIS/COFINS",
+                                                                     filetypes=[("Text files", "*.txt")])
+        else:
+            self.file_paths = filedialog.askopenfilenames(title="Selecione os arquivos",
+                                                          filetypes=[("Text files", "*.txt")])
+        self.update_selected_files_list()
 
     def select_save_location(self):
         folder_selected = filedialog.askdirectory(title="Selecione a pasta para salvar")
@@ -156,11 +197,8 @@ class Application(ctk.CTk):
             self.save_path.set(folder_selected)
 
     def process_documents(self):
-        if not self.file_paths:
+        if not self.file_paths and not (self.file_paths_icms and self.file_paths_pis_cofins):
             messagebox.showinfo("Informação", "Nenhum arquivo selecionado.")
-            return
-        if not self.client_name.get() or not self.client_cnpj.get():
-            messagebox.showinfo("Informação", "Nome do Cliente e CNPJ são obrigatórios.")
             return
         if not self.save_path.get():
             messagebox.showinfo("Informação", "Selecione o local para salvar o arquivo.")
@@ -169,54 +207,56 @@ class Application(ctk.CTk):
             messagebox.showinfo("Alerta!", "Selecione o tipo do arquivo.")
             return
         results = []
-        total_files = len(self.file_paths)
+        total_files = len(self.file_paths) + len(self.file_paths_icms or []) + len(self.file_paths_pis_cofins or [])
         for i, file_path in enumerate(self.file_paths):
             result = []
-            if self.file_type.get() == "EFC ICMS/PIS COFINS":
-                result = retorna_produtos_e_impostos_cruzamento_efd_icms_pis_cofins(icms_path, pis_cofins_path)
-            if self.file_type.get() == "SPED Contribuições":
+            if self.file_type.get() == "EFD ICMS/PIS COFINS":
+                result = retorna_produtos_e_impostos_cruzamento_efd_icms_pis_cofins(self.file_paths_icms,
+                                                                                    self.file_paths_pis_cofins)
+            elif self.file_type.get() == "SPED Contribuições":
                 result = retorna_produtos_e_impostos_sped_contrib([file_path])
-            if self.file_type.get() == "XML":
+            elif self.file_type.get() == "XML":
                 result = retorna_produtos_e_impostos_xmls([file_path])
             results.extend(result)
             self.progress.set((i + 1) / total_files)
             self.update_idletasks()
-
-        resultados_processados = retorna_retirada_icms_bc(results)
-        if len(resultados_processados) == 0:
-            messagebox.showerror("Alerta!", "Nenhum movimentação valida encontrada.")
-            self.progress.set(0)
-            self.destroy()
-        else:
-            resultados_agrupados = agrupar_resultados_por_comp(resultados_processados)
-
-            filename = f"{self.save_path.get()}/{self.client_name.get()}.xlsx"
-            create_spreadsheet(resultados_agrupados, filename, self.client_name.get(), self.client_cnpj.get())
-            messagebox.showinfo("Informação", "Processamento concluído!")
-            self.progress.set(0)
-            self.destroy()
+            if result is str:
+                messagebox.showerror("Erro!", results)
+                self.progress.set(0)
+                break
+        if results is not str:
+            resultados_processados = retorna_retirada_icms_bc(results)
+            if len(resultados_processados) == 0:
+                messagebox.showerror("Alerta!", "Nenhum movimentação valida encontrada.")
+                self.progress.set(0)
+                self.destroy()
+            else:
+                resultados_agrupados = agrupar_resultados_por_comp(resultados_processados)
+                filename = f"{self.save_path.get()}/{self.client_name.get()}.xlsx"
+                create_spreadsheet(resultados_agrupados, filename, self.client_name.get(), self.client_cnpj.get())
+                messagebox.showinfo("Informação", "Processamento concluído!")
+                self.progress.set(0)
+                self.destroy()
 
     def update_file_list(self, _=None):
-        # Update the flag based on the selected file type
         selected_option = self.file_type.get()
         if selected_option == "SPED Contribuições":
             self.flag = "flag_sped_contrib"
         elif selected_option == "EFD ICMS/PIS COFINS":
-            self.flag = "flag_icms_pis_cofins"
+            self.flag = "flag_comp_efd_icms_pis_cofins"
         elif selected_option == "XML":
             self.flag = "flag_xml"
         else:
-            self.flag = None  # Reset flag if no valid option is selected
+            self.flag = None
 
-        # Refresh the file selector display
+        # Limpa os widgets antigos antes de recriar os componentes
+        clear_frame(self, self.left_section)
+        self.create_left_section()
+
+
+        # Recria as seções
         self.create_file_selector(self.left_section)
-
-        # Update the file list display
-        self.file_listbox.configure(state="normal")
-        self.file_listbox.delete("1.0", ctk.END)
-        for file_path in self.file_paths:
-            self.file_listbox.insert(ctk.END, file_path + "\n")
-        self.file_listbox.configure(state="disabled")
+        self.create_client_info(self.left_section)
 
     def on_key_release(self):
         current_text = self.cnpj_entry.get()

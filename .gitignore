@@ -1,7 +1,6 @@
 .venv
 
-
-.idea/inspectionProfiles/
+.idea
 files
 dist
 build

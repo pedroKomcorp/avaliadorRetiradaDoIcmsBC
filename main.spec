@@ -16,10 +16,10 @@ a = Analysis(
         (os.path.join(project_dir, 'extractor.py'), '.'),
         (os.path.join(project_dir, 'transformer.py'), '.'),
         (os.path.join(project_dir, 'loader.py'), '.'),
-        (os.path.join(project_dir, 'assets', 'LOGOS_KOMBUSINESS_FUNDOESCURO_V2.ico'), 'assets'),
-        (os.path.join(project_dir, 'assets', 'kbicon.ico'), 'assets'),
-        (os.path.join(project_dir, 'assets', 'icon.ico'), 'assets'),
-        (os.path.join(project_dir, 'assets', 'kombussines_theme.json'), 'assets')
+        (os.path.join(project_dir, '../assets', 'LOGOS_KOMBUSINESS_FUNDOESCURO_V2.ico'), 'assets'),
+        (os.path.join(project_dir, '../assets', 'kbicon.ico'), 'assets'),
+        (os.path.join(project_dir, '../assets', 'icon.ico'), 'assets'),
+        (os.path.join(project_dir, '../assets', 'kombussines_theme.json'), 'assets')
     ],
     hiddenimports=collect_submodules('openpyxl') + [
         'extractor',

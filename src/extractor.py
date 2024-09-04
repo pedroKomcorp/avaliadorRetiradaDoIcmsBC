@@ -1,7 +1,24 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List
+from typing import List, AnyStr
+import sqlite3
 import xmltodict
+from tqdm import tqdm
+
+
+cfops_permitidos = ['5101', '5102', '5103', '5104', '5124', '5123', '5125', '6108',
+                    '6101', '6102', '6103', '6104', '6107', '6124', '6123', '6125',
+                    '5251', '5252', '5253', '5254', '5255', '5256', '5257', '5258',
+                    '5301', '5302', '5303', '5304', '5305', '5306', '5307', '5351',
+                    '5352', '5353', '5354', '5355', '5356', '5357', '5359', '5401',
+                    '5402', '5403', '5405', '5551', '5651', '5652', '5653', '5654',
+                    '5655', '5656', '5667', '6251', '6252', '6253', '6254', '6255',
+                    '6256', '6257', '6258', '6301', '6302', '6303', '6304', '6305',
+                    '6306', '6307', '6351', '6352', '6353', '6354', '6355', '6356',
+                    '6357', '6359', '6401', '6402', '6403', '6404', '6551', '6651',
+                    '6652', '6653', '6654', '6655', '6656', '6667']
+
+# TODO: IMPORTAR TODOS OS POSSÍVEIS CFOPS PERMITIDOS
 
 
 @dataclass
@@ -46,30 +63,63 @@ class Produto:
     impostos: Impostos = field(default_factory=Impostos)
 
 
+def safe_float_convertion(value: str) -> float:
+    if value == "":
+        return 0.0
+    else:
+        return float(value.replace(',', '.'))
+
+
+def get_tributo_ncm(ncm: str) -> str:
+    conn = sqlite3.connect('taxations.db')
+    curr = conn.cursor()
+    curr.execute("SELECT TRIBUTAÇÃO FROM tic_ncm_cst WHERE ncm = ?", (ncm,))
+    return curr.fetchone()
+
+
+def get_ncm_produto(lines: list[AnyStr], cod_0200: str) -> str:
+    for line in lines:
+        print(line)
+        columns = line.strip().split("|")
+        if '|0200|' in line and '|9999|' not in line and '|9900|':
+            if columns[2] == cod_0200:
+                print(columns)
+                return columns[8]
+
+
 def retorna_produtos_e_impostos_cruzamento_efd_icms_pis_cofins(efd_icms_paths, efd_pis_cofins_paths) -> List[Produto]:
     produtos = []
 
-    for efd_icms_path in efd_icms_paths:
+    # Wrap efd_icms_paths with tqdm for progress tracking
+    for efd_icms_path in tqdm(efd_icms_paths, desc="Processing EFD ICMS Files"):
         with open(efd_icms_path, 'r', encoding="Latin-1") as file:
-            efd_data_inicio, efd_data_fim = check_sped_date(efd_icms_path)
+            efd_data_inicio, efd_data_fim = check_sped_date(efd_icms_path, 4, 5)
             lines = file.readlines()
             orig_icms = '0'
             cst_icms = ''
             aliq_icms = 0
             bc_icms = 0
             valor_icms = 0
-            comp_icms = ""
+            comp_icms = ''
+            icms_found = False
+
             for line in lines:
                 columns = line.strip().split("|")
-                if '|0000|' in line and '|9999|' not in line:
-                    date_obj = extract_date_from_line(line)
+                if '|0000|' in line and '|9999|' not in line and '|9900|' not in line:
+                    date_obj = extract_date_from_line(columns, 4)
                     comp_icms = date_obj.strftime("%m/%Y")
-                if '|C190|' in line:
-                    cst_icms = columns[2]
-                    aliq_icms += float(columns[4])
-                    bc_icms += float(columns[8])
-                    valor_icms += float(columns[7])
-            icms_values = ICMS(
+                if '|C190|' in line and '|9999|' not in line and '|9900|' not in line:
+                    if columns[3] in cfops_permitidos:
+                        cst_icms = columns[2]
+                        aliq_icms = safe_float_convertion(columns[4])
+                        bc_icms += safe_float_convertion(columns[6])
+                        valor_icms += safe_float_convertion(columns[7])
+                        icms_found = True
+
+            if not icms_found:
+                continue
+
+            icms_total_values = ICMS(
                 orig=orig_icms,
                 cst=cst_icms,
                 bc=bc_icms,
@@ -77,11 +127,14 @@ def retorna_produtos_e_impostos_cruzamento_efd_icms_pis_cofins(efd_icms_paths, e
                 valor=valor_icms
             )
 
+            tributado = 0
+            total_produtos = 0
             data_flag = False
+            produtos_found = False
 
-            for efd_pis_cofins_path in efd_pis_cofins_paths:
-                with open(efd_pis_cofins_path, 'r', encoding="Latin-1") as file:
-                    lines = file.readlines()
+            for efd_pis_cofins_path in tqdm(efd_pis_cofins_paths, desc="Processing EFD PIS/COFINS Files", leave=False):
+                with open(efd_pis_cofins_path, 'r', encoding="Latin-1") as efd:
+                    lines = efd.readlines()
                     cst_pis = ""
                     bc_pis = 0
                     aliq_pis = 0
@@ -95,61 +148,92 @@ def retorna_produtos_e_impostos_cruzamento_efd_icms_pis_cofins(efd_icms_paths, e
                     cfop_produto = ""
                     frete_produto = 0
 
-                    for line in lines:
-                        columns = line.strip().split("|")
-                        if '|0000|' in line and '|9999|' not in line:
-                            date_obj = extract_date_from_line(columns)
-                            if efd_data_inicio <= date_obj <= efd_data_fim:
-                                data_flag = True
+                    for index, line_pis_cofins in enumerate(lines):
+                        columns = line_pis_cofins.strip().split("|")
+                        if '|0000|' in line_pis_cofins:
+                            if '|9999|' not in line_pis_cofins and '|9900|' not in line_pis_cofins:
+                                date_obj = extract_date_from_line(columns, 6)
+                                if efd_data_inicio <= date_obj <= efd_data_fim:
+                                    data_flag = True
                         if data_flag:
-                            if '|C170|' in line and '|9999|' not in line:
-                                cst_pis = columns[24]
-                                bc_pis += float(columns[25])
-                                aliq_pis += float(columns[26])
-                                valor_pis += float(columns[27])
-                                cst_cofins = columns[28]
-                                bc_cofins += float(columns[29])
-                                aliq_cofins += float(columns[30])
-                                valor_cofins += float(columns[31])
-                                nome_produto = columns[8]
-                                valor_produto += float(columns[13])
-                                cfop_produto = columns[11]
-                                frete_produto += float(columns[20])
+                            if '|C100|' in line and '|9900|' not in line:
+                                latest_c100_valid = is_c100_valid(line)
+                            if '|C170|' in line and '|9900|' not in line:
+                                if latest_c100_valid and len(columns) >= 39:
+                                    total_produtos += 1
+                                    cod_0200 = columns[2]
+                                    ncm = get_ncm_produto(lines, cod_0200)
+                                    class_tributo = get_tributo_ncm(ncm)
+                                    if class_tributo == 'TRIBUTADO':
+                                        tributado += 1
 
-                    pis_values = PIS(
-                        cst=cst_pis,
-                        bc=bc_pis,
-                        aliq=aliq_pis,
-                        valor=valor_pis
-                    )
+                                    cst_pis = columns[24]
+                                    bc_pis += safe_float_convertion(columns[26])
+                                    aliq_pis = safe_float_convertion(columns[27])
+                                    valor_pis += safe_float_convertion(columns[30])
+                                    cst_cofins = columns[31]
+                                    bc_cofins += safe_float_convertion(columns[32])
+                                    aliq_cofins = safe_float_convertion(columns[33])
+                                    valor_cofins += safe_float_convertion(columns[36])
+                                    nome_produto = columns[8]
+                                    valor_produto += safe_float_convertion(columns[13])
+                                    cfop_produto = columns[11]
+                                    frete_produto += safe_float_convertion(columns[20])
+                                    produtos_found = True
 
-                    cofins_values = COFINS(
-                        cst=cst_cofins,
-                        bc=bc_cofins,
-                        aliq=aliq_cofins,
-                        valor=valor_cofins
-                    )
+                    if not produtos_found:
+                        continue
 
-                    impostos = Impostos(
-                        icms=icms_values,
-                        cofins=cofins_values,
-                        pis=pis_values
-                    )
+                    data_flag = False
 
-                    produto = Produto(
-                        comp=comp_icms,
-                        nome=nome_produto,
-                        valor=valor_produto,
-                        cfop=cfop_produto,
-                        frete=frete_produto,
-                        impostos=impostos
-                    )
-    produtos.append(produto)
+                    if total_produtos != 0:
+                        proporcao_tributados = tributado / total_produtos
+                        icms_proporcional_tributado_values = ICMS(
+                            orig=icms_total_values.orig,
+                            cst=icms_total_values.cst,
+                            bc=icms_total_values.bc * proporcao_tributados,
+                            aliq=icms_total_values.aliq,
+                            valor=icms_total_values.valor * proporcao_tributados
+                        )
+
+                        pis_values = PIS(
+                            cst=cst_pis,
+                            bc=bc_pis,
+                            aliq=aliq_pis,
+                            valor=valor_pis
+                        )
+
+                        cofins_values = COFINS(
+                            cst=cst_cofins,
+                            bc=bc_cofins,
+                            aliq=aliq_cofins,
+                            valor=valor_cofins
+                        )
+
+                        impostos = Impostos(
+                            icms=icms_proporcional_tributado_values,
+                            cofins=cofins_values,
+                            pis=pis_values
+                        )
+
+                        produto = Produto(
+                            comp=comp_icms,
+                            nome=nome_produto,
+                            valor=valor_produto,
+                            cfop=cfop_produto,
+                            frete=0,
+                            impostos=impostos
+                        )
+
+                        produtos.append(produto)
+                        break
+                    else:
+                        print("Data de EFD ICMS não encontrada no EFD PIS/COFINS")
     return produtos
 
 
 # sped contrib
-def retorna_produtos_e_impostos_sped_contrib(sped_contrib_paths) -> List[Produto]:
+def retorna_produtos_e_impostos_sped_contrib(sped_contrib_paths) -> List[Produto] | str:
     found_0000 = False
     product_list = []
     for sped_contrib_path in sped_contrib_paths:
@@ -161,7 +245,7 @@ def retorna_produtos_e_impostos_sped_contrib(sped_contrib_paths) -> List[Produto
                 frete_calculado = 0.0
                 for index, line in enumerate(lines):
                     if check_line_reg('|0000|', line) and not found_0000:
-                        date_obj = extract_date_from_line(line)
+                        date_obj = extract_date_from_line(line, 6)
                         comp_contrib = date_obj.strftime("%m/%Y")
                         found_0000 = True
                     if '|C100|' in line and '|9900|' not in line:
@@ -226,20 +310,21 @@ def retorna_produtos_e_impostos_sped_contrib(sped_contrib_paths) -> List[Produto
                                 )
                                 product_list.append(produto)
         except Exception as e:
-            print(f"Erro ao processar o arquivo {sped_contrib_path}: {e}")
-            continue
+            return str(e)
     return product_list
 
 
-def check_sped_date(sped_path):
+def check_sped_date(sped_path, pos_initial, pos_end):
+    from datetime import datetime
+
     with open(sped_path, 'r', encoding='latin-1') as sped:
         lines = sped.readlines()
         for line in lines:
             if line.startswith('|0000|'):
                 columns = line.split('|')
-                # Correct the date parsing
-                return (datetime.strptime(columns[6], '%d%m%Y').strftime('%d%m%Y'),
-                        datetime.strptime(columns[7], '%d%m%Y').strftime('%d%m%Y'))
+                date_initial = datetime.strptime(columns[pos_initial], '%d%m%Y')
+                date_end = datetime.strptime(columns[pos_end], '%d%m%Y')
+                return date_initial, date_end
 
 
 def compara_valores(valor_validado, valor_pis, valor_cofins, tolerancia=3):
@@ -251,7 +336,7 @@ def compara_valores(valor_validado, valor_pis, valor_cofins, tolerancia=3):
     :param valor_pis: Valor da base PIS.
     :param valor_cofins: Valor da base COFINS.
     :param tolerancia: Tolerância permitida para a diferença.
-    :return: True se a diferença for menor ou igual à tolerância, False caso contrário.
+    :return: True se a diferença for menor ou igual à tolerância, false caso contrário.
     """
 
     if valor_pis == "" or valor_cofins == "" or valor_pis is None or valor_cofins is None:
@@ -442,8 +527,8 @@ def parse_date(date_str):
 def check_line_reg(reg: str, line: str): return reg in line and '9900' not in line
 
 
-def extract_date_from_line(columns):
-    date_str = columns[6]
+def extract_date_from_line(columns, pos):
+    date_str = columns[pos]
     day = date_str[:2]
     month = date_str[2:4]
     year = date_str[4:8]

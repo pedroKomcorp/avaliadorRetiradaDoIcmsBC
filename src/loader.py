@@ -47,7 +47,7 @@ def create_spreadsheet(results, filename, client_name, client_cnpj):
     sheet['H1'].alignment = Alignment(vertical='bottom')
     sheet.row_dimensions[2].height = 35
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    img = Image(os.path.join(script_dir, "assets", "LOGOS_KOMBUSINESS_FUNDOESCURO_V2.png"))
+    img = Image(os.path.join(script_dir, "../assets", "LOGOS_KOMBUSINESS_FUNDOESCURO_V2.png"))
     img.width = 200.84
     img.height = 70.2
     img.anchor = 'G1'
